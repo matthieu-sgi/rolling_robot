@@ -1,0 +1,1 @@
+This repo is using the hardware designed in the [machine_learning_robot repo](https://github.com/matthieu-sgi/machine_learning_robot).
