@@ -103,14 +103,40 @@ void loop()
     // usbSerial.println(value);
     data = lidarSerial.read();
     if(data == 44 && old_data == 84){ // 84 = starting header (0x54) | 44 = data length (0x2C)
+      usbSerial.println("starting recording one rotation data");
+
       formatted_data.header = old_data;
       formatted_data.ver_len = data;
       // radar speed 
       formatted_data.speed = read_2_bytes(&lidarSerial);
       // start angle
       formatted_data.start_angle = read_2_bytes(&lidarSerial);
+      usbSerial.print("sa ");
+      usbSerial.println(formatted_data.start_angle);
+      // distance data
+      usbSerial.print("nbv ");
+      usbSerial.println(ANGLE_PER_FRAME);
+      for(int i = 0; i<ANGLE_PER_FRAME; i++)
+      {
+        formatted_data.point[i].distance = read_2_bytes(&lidarSerial);
+        formatted_data.point[i].confidence = lidarSerial.read();
+        // usbSerial.print("v");
+        usbSerial.print(i);
+        usbSerial.print(" ");
+        usbSerial.println(formatted_data.point[i].distance);
+      }
 
-      // 
+      // End angle
+      formatted_data.end_angle = read_2_bytes(&lidarSerial);
+      usbSerial.print("ea ");
+      usbSerial.println(formatted_data.end_angle);
+
+      // Timestamp
+      formatted_data.timestamp = read_2_bytes(&lidarSerial);
+
+      // CRC check
+      formatted_data.crc8 = lidarSerial.read();
+
 
     }
     // usbSerial.println(data);
