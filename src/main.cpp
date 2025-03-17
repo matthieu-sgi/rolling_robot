@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include <pthread.h>
 
 // Definition of pinout
 #define RIGHT_MTR_FRWD 36
@@ -7,7 +8,7 @@
 
 #define LEFT_MTR_FRWD 45
 #define LEFT_MTR_BCKWD 35
-#define LEFT_RIGHT_MTR 47
+#define PWM_LEFT_MTR 47
 
 #define MOTOR_STANDBY 46
 
@@ -39,6 +40,58 @@ typedef struct __attribute__((packed))
   uint8_t crc8;
 } LiDARFrameTypeDef;
 
+void forward()
+{
+  digitalWrite(LEFT_MTR_FRWD, HIGH);
+  digitalWrite(RIGHT_MTR_FRWD, HIGH);
+
+  digitalWrite(LEFT_MTR_BCKWD, LOW);
+  digitalWrite(RIGHT_MTR_BCKWD, LOW);
+}
+
+bool toggle = false;
+void toggle_standby()
+{
+  toggle = !toggle;
+  digitalWrite(MOTOR_STANDBY, toggle);
+  analogWrite(PWM_LEFT_MTR, 150);
+  analogWrite(PWM_RIGHT_MTR, 150);
+}
+
+void left()
+{
+  digitalWrite(LEFT_MTR_FRWD, LOW);
+  digitalWrite(RIGHT_MTR_FRWD, HIGH);
+
+  digitalWrite(LEFT_MTR_BCKWD, LOW);
+  digitalWrite(RIGHT_MTR_BCKWD, LOW);
+}
+
+void right()
+{
+  digitalWrite(LEFT_MTR_FRWD, HIGH);
+  digitalWrite(RIGHT_MTR_FRWD, LOW);
+
+  digitalWrite(LEFT_MTR_BCKWD, LOW);
+  digitalWrite(RIGHT_MTR_BCKWD, LOW);
+}
+
+void backward()
+{
+  digitalWrite(LEFT_MTR_FRWD, LOW);
+  digitalWrite(RIGHT_MTR_FRWD, LOW);
+
+  digitalWrite(LEFT_MTR_BCKWD, HIGH);
+  digitalWrite(RIGHT_MTR_BCKWD, HIGH);
+}
+
+void *robotCommandListenner(void *var)
+{
+  while (true)
+  {
+  }
+}
+
 void setup()
 {
   usbSerial.begin(230400);
@@ -50,7 +103,7 @@ void setup()
 
   pinMode(LEFT_MTR_FRWD, OUTPUT);
   pinMode(LEFT_MTR_BCKWD, OUTPUT);
-  pinMode(LEFT_RIGHT_MTR, OUTPUT);
+  pinMode(PWM_LEFT_MTR, OUTPUT);
 
   pinMode(MOTOR_STANDBY, OUTPUT);
   digitalWrite(MOTOR_STANDBY, 0);
@@ -58,6 +111,17 @@ void setup()
   pinMode(LIDAR_PWM, INPUT_PULLDOWN);
   // digitalWrite(LIDAR_PWM, 0); // Grounded should also be 10Hz
   // analogWrite(LIDAR_PWM,102); // 40% of 255 -> 40% of duty cycle -> ~10hz
+  // pthread_t thread_id;
+  // pthread_create(&thread_id, NULL, robotCommandListenner, NULL);
+  // xTaskCreatePinnedToCore (
+  //   robotCommandListenner,     // Function to implement the task
+  //   "robot_listenner",   // Name of the task
+  //   1000,      // Stack size in bytes
+  //   NULL,      // Task input parameter
+  //   0,         // Priority of the task
+  //   NULL,      // Task handle.
+  //   0          // Core where the task should run
+  // );
 }
 
 int counter = 3;
@@ -68,7 +132,8 @@ uint16_t bit_shift(uint8_t msb, uint8_t lsb)
   return (msb << 8) | lsb;
 }
 
-uint16_t read_2_bytes(HardwareSerial* mySerial ){
+uint16_t read_2_bytes(HardwareSerial *mySerial)
+{
   uint8_t lsb = mySerial->read();
   uint8_t msb = mySerial->read();
   return bit_shift(msb, lsb);
@@ -79,35 +144,24 @@ u_int8_t old_data = 0;
 
 LiDARFrameTypeDef formatted_data;
 
-
 void loop()
 {
-  // digitalWrite(RIGHT_MTR_FRWD, 1);
-  // digitalWrite(RIGHT_MTR_BCKWD, 0);
-  // digitalWrite(LEFT_MTR_FRWD, 1);
-  // digitalWrite(LEFT_MTR_BCKWD, 0);
-  // analogWrite(PWM_RIGHT_MTR, 255);
-  // analogWrite(LEFT_RIGHT_MTR, 255);
-  // delay(1000);
-  // digitalWrite(RIGHT_MTR_FRWD, 0);
-  // digitalWrite(RIGHT_MTR_BCKWD, 1);
-  // digitalWrite(LEFT_MTR_FRWD, 0);
-  // digitalWrite(LEFT_MTR_BCKWD, 1);
-  // delay(1000);
 
   // Working here
+  // while (false)
   while (lidarSerial.available() > 0)
   {
     // analogWrite(LIDAR_PWM,50); // 40% of 255 -> 40% of duty cycle -> ~10hz
     // byte value = lidarSerial.read();
     // usbSerial.println(value);
     data = lidarSerial.read();
-    if(data == 44 && old_data == 84){ // 84 = starting header (0x54) | 44 = data length (0x2C)
+    if (data == 44 && old_data == 84)
+    { // 84 = starting header (0x54) | 44 = data length (0x2C)
       // usbSerial.print("start ");
 
       formatted_data.header = old_data;
       formatted_data.ver_len = data;
-      // radar speed 
+      // radar speed
       formatted_data.speed = read_2_bytes(&lidarSerial);
       // start angle
       formatted_data.start_angle = read_2_bytes(&lidarSerial);
@@ -119,7 +173,7 @@ void loop()
       usbSerial.print("nbv:");
       usbSerial.print(ANGLE_PER_FRAME);
       usbSerial.print(" ");
-      for(int i = 0; i<ANGLE_PER_FRAME; i++)
+      for (int i = 0; i < ANGLE_PER_FRAME; i++)
       {
         formatted_data.point[i].distance = read_2_bytes(&lidarSerial);
         formatted_data.point[i].confidence = lidarSerial.read();
@@ -148,7 +202,30 @@ void loop()
     old_data = data;
   }
 
-
+  while (usbSerial.available() > 0)
+  {
+    char keyboard_event = usbSerial.read();
+    // usbSerial.print(keyboard_event);
+    // usbSerial.print('\n');
+    switch (keyboard_event)
+    {
+    case 'u':
+      forward();
+      break;
+    case 't':
+      toggle_standby();
+      break;
+    case 'd':
+      backward();
+      break;
+    case 'r':
+      right();
+      break;
+    case 'l':
+      left();
+      break;
+    default:
+      break;
+    }
+  }
 }
-
-
