@@ -1,5 +1,7 @@
 #include <Arduino.h>
 #include <pthread.h>
+#include <WiFi.h>
+#include <secrets.h>
 
 // Definition of pinout
 #define RIGHT_MTR_FRWD 36
@@ -17,6 +19,13 @@
 
 HardwareSerial lidarSerial(2);
 HardwareSerial usbSerial(0);
+
+const char *ssid = SSID;
+const char *password = PASSWORD;
+
+WiFiClient tcpClient;
+const char *host = "192.168.200.105"; // IP of the tcpClient(Computer with viz)
+const int port = 3000;
 
 // Following the datasheet of the Lidar
 #define ANGLE_PER_FRAME 12
@@ -94,8 +103,27 @@ void *robotCommandListenner(void *var)
 
 void setup()
 {
-  usbSerial.begin(230400);
   lidarSerial.begin(230400, SERIAL_8N1, LIDAR_TX, -1);
+  usbSerial.begin(115200);
+  WiFi.mode(WIFI_STA);
+  usbSerial.println(ssid);
+  usbSerial.println(password);
+  WiFi.begin(ssid, password);
+  while (WiFi.status() != WL_CONNECTED)
+  {
+    delay(500);
+    usbSerial.println("Connecting to WiFi..");
+  }
+
+  usbSerial.println("Connected to WiFi network");
+  usbSerial.print("IP Address: ");
+  usbSerial.println(WiFi.localIP());
+  if (!tcpClient.connect(host, port))
+  {
+    usbSerial.println("Connection to TCP tcpClient failed");
+    // delay(100);
+    return;
+  }
 
   pinMode(RIGHT_MTR_FRWD, OUTPUT);
   pinMode(RIGHT_MTR_BCKWD, OUTPUT);
@@ -109,19 +137,6 @@ void setup()
   digitalWrite(MOTOR_STANDBY, 0);
 
   pinMode(LIDAR_PWM, INPUT_PULLDOWN);
-  // digitalWrite(LIDAR_PWM, 0); // Grounded should also be 10Hz
-  // analogWrite(LIDAR_PWM,102); // 40% of 255 -> 40% of duty cycle -> ~10hz
-  // pthread_t thread_id;
-  // pthread_create(&thread_id, NULL, robotCommandListenner, NULL);
-  // xTaskCreatePinnedToCore (
-  //   robotCommandListenner,     // Function to implement the task
-  //   "robot_listenner",   // Name of the task
-  //   1000,      // Stack size in bytes
-  //   NULL,      // Task input parameter
-  //   0,         // Priority of the task
-  //   NULL,      // Task handle.
-  //   0          // Core where the task should run
-  // );
 }
 
 int counter = 3;
@@ -153,42 +168,32 @@ void loop()
   {
     // analogWrite(LIDAR_PWM,50); // 40% of 255 -> 40% of duty cycle -> ~10hz
     // byte value = lidarSerial.read();
-    // usbSerial.println(value);
     data = lidarSerial.read();
     if (data == 44 && old_data == 84)
     { // 84 = starting header (0x54) | 44 = data length (0x2C)
       // usbSerial.print("start ");
 
+      String msg = "";
       formatted_data.header = old_data;
       formatted_data.ver_len = data;
       // radar speed
       formatted_data.speed = read_2_bytes(&lidarSerial);
       // start angle
       formatted_data.start_angle = read_2_bytes(&lidarSerial);
-      usbSerial.print("sa:");
-      usbSerial.print(formatted_data.start_angle);
-      usbSerial.print(" ");
-
+      msg += "sa:" + String(formatted_data.start_angle) + " ";
       // distance data
-      usbSerial.print("nbv:");
-      usbSerial.print(ANGLE_PER_FRAME);
-      usbSerial.print(" ");
+      msg += "nbv:" + String(ANGLE_PER_FRAME) + " ";
       for (int i = 0; i < ANGLE_PER_FRAME; i++)
       {
         formatted_data.point[i].distance = read_2_bytes(&lidarSerial);
         formatted_data.point[i].confidence = lidarSerial.read();
-        // usbSerial.print("v");
-        usbSerial.print(i);
-        usbSerial.print(":");
-        usbSerial.print(formatted_data.point[i].distance);
-        usbSerial.print(" ");
+
+        msg += "v" + String(i) + ":" + String(formatted_data.point[i].distance) + " ";
       }
 
       // End angle
       formatted_data.end_angle = read_2_bytes(&lidarSerial);
-      usbSerial.print("ea:");
-      usbSerial.print(formatted_data.end_angle);
-      // usbSerial.print(" ");
+      msg += "ea:" + String(formatted_data.end_angle) + " ";
 
       // Timestamp
       formatted_data.timestamp = read_2_bytes(&lidarSerial);
@@ -196,36 +201,37 @@ void loop()
       // CRC check
       formatted_data.crc8 = lidarSerial.read();
 
-      usbSerial.print("\n");
+      msg += "\n";
+      tcpClient.write(msg.c_str(), msg.length());
     }
     // usbSerial.println(data);
     old_data = data;
   }
 
-  while (usbSerial.available() > 0)
-  {
-    char keyboard_event = usbSerial.read();
-    // usbSerial.print(keyboard_event);
-    // usbSerial.print('\n');
-    switch (keyboard_event)
-    {
-    case 'u':
-      forward();
-      break;
-    case 't':
-      toggle_standby();
-      break;
-    case 'd':
-      backward();
-      break;
-    case 'r':
-      right();
-      break;
-    case 'l':
-      left();
-      break;
-    default:
-      break;
-    }
-  }
+  // while (usbSerial.available() > 0)
+  // {
+  //   char keyboard_event = usbSerial.read();
+  //   // usbSerial.print(keyboard_event);
+  //   // usbSerial.print('\n');
+  //   switch (keyboard_event)
+  //   {
+  //   case 'u':
+  //     forward();
+  //     break;
+  //   case 't':
+  //     toggle_standby();
+  //     break;
+  //   case 'd':
+  //     backward();
+  //     break;
+  //   case 'r':
+  //     right();
+  //     break;
+  //   case 'l':
+  //     left();
+  //     break;
+  //   default:
+  //     break;
+  //   }
+  // }
 }
