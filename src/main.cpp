@@ -24,7 +24,7 @@ const char *ssid = SSID;
 const char *password = PASSWORD;
 
 WiFiClient tcpClient;
-const char *host = "192.168.200.105"; // IP of the tcpClient(Computer with viz)
+const char *host = "192.168.100.2"; // IP of the tcpClient(Computer with viz)
 const int port = 3000;
 
 // Following the datasheet of the Lidar
@@ -188,7 +188,7 @@ void loop()
         formatted_data.point[i].distance = read_2_bytes(&lidarSerial);
         formatted_data.point[i].confidence = lidarSerial.read();
 
-        msg += "v" + String(i) + ":" + String(formatted_data.point[i].distance) + " ";
+        msg += String(i) + ":" + String(formatted_data.point[i].distance) + " ";
       }
 
       // End angle
@@ -201,37 +201,35 @@ void loop()
       // CRC check
       formatted_data.crc8 = lidarSerial.read();
 
-      msg += "\n";
       tcpClient.write(msg.c_str(), msg.length());
     }
     // usbSerial.println(data);
     old_data = data;
   }
-
-  // while (usbSerial.available() > 0)
-  // {
-  //   char keyboard_event = usbSerial.read();
-  //   // usbSerial.print(keyboard_event);
-  //   // usbSerial.print('\n');
-  //   switch (keyboard_event)
-  //   {
-  //   case 'u':
-  //     forward();
-  //     break;
-  //   case 't':
-  //     toggle_standby();
-  //     break;
-  //   case 'd':
-  //     backward();
-  //     break;
-  //   case 'r':
-  //     right();
-  //     break;
-  //   case 'l':
-  //     left();
-  //     break;
-  //   default:
-  //     break;
-  //   }
-  // }
+  while (tcpClient.available() > 0)
+  {
+    char keyboard_event = tcpClient.read();
+    usbSerial.print(keyboard_event);
+    // usbSerial.print('\n');
+    switch (keyboard_event)
+    {
+    case 'u':
+      forward();
+      break;
+    case 't':
+      toggle_standby();
+      break;
+    case 'd':
+      backward();
+      break;
+    case 'r':
+      right();
+      break;
+    case 'l':
+      left();
+      break;
+    default:
+      break;
+    }
+  }
 }
